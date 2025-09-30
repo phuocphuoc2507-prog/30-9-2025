@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>PaperGo - Trạm Tái Chế Thông Minh</title>
+    <!-- GOOGLE FONTS (POPPINS) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- FONT AWESOME (ICONS) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <img src="https://i.imgur.com/Q8gO7P2.png" alt="PaperGo Logo" class="logo">
+            <h1>Trạm Tái Chế Thông Minh PaperGo</h1>
+        </header>
+        <main>
+            <div id="status-idle" class="status-card">
+                <i class="fa-solid fa-recycle icon-large"></i>
+                <h2>Xin chào!</h2>
+                <p>Hãy ấn "H" để bắt đầu tái chế nhé</p>
+            </div>
+
+            <div id="status-recognizing" class="status-card" style="display: none;">
+                <img id="video-feed" width="640" height="480">
+                <p id="message-area"><i class="fa-solid fa-camera"></i> Xin hãy nhìn thẳng vào camera...</p>
+            </div>
+
+            <div id="status-confirmation" class="status-card" style="display: none;">
+                <i class="fa-solid fa-user-check icon-large"></i>
+                <h2 id="confirmation-question">Bạn có phải là...?</h2>
+                <div class="buttons">
+                    <button id="yes-button"><i class="fa-solid fa-check"></i> ĐÚNG (Y)</button>
+                    <button id="no-button"><i class="fa-solid fa-xmark"></i> SAI (N)</button>
+                </div>
+            </div>
+
+            <div id="status-weighing" class="status-card" style="display: none;">
+                <h2>Mời bạn bỏ giấy vào thùng</h2>
+                <div class="weighing-container">
+                    <div class="bin-display">
+                        <h3><i class="fa-solid fa-box-archive"></i> Thùng 1</h3>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" id="progress-bar-1"></div>
+                        </div>
+                        <p class="percentage" id="percentage-1">0%</p>
+                        <p class="weight-kg" id="weight-kg-1">0.000 kg</p>
+                    </div>
+                    <div class="bin-display">
+                        <h3><i class="fa-solid fa-box-archive"></i> Thùng 2</h3>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" id="progress-bar-2"></div>
+                        </div>
+                        <p class="percentage" id="percentage-2">0%</p>
+                        <p class="weight-kg" id="weight-kg-2">0.000 kg</p>
+                    </div>
+                </div>
+                <p class="weighing-info">Đã thêm: <span id="added-weight">0</span> g</p>
+                <p class="time-left-text"><i class="fa-regular fa-clock"></i> Thời gian còn lại: <span id="time-left">15</span> giây</p>
+                <p class="instruction">(Trong chế độ giả lập, nhấn Spacebar để thêm giấy)</p>
+            </div>
+            <div id="status-failure-learning" class="status-card" style="display: none;">
+                <i class="fa-solid fa-user-plus icon-large"></i>
+                <h2>Đăng ký thành viên mới</h2>
+                <p>Mình chưa nhận ra bạn. Vui lòng nhập thông tin bên dưới để lưu lại hình ảnh:</p>
+                <form id="unknown-info-form">
+                    <input type="text" id="input-name" placeholder="Họ và tên" required style="margin:5px; padding:8px; width:200px;" />
+                    <input type="text" id="input-class" placeholder="Lớp" required style="margin:5px; padding:8px; width:100px;" />
+                    <button type="submit" id="submit-unknown-info" style="padding:8px 20px;">Xác nhận</button>
+                </form>
+                <p id="unknown-info-message" style="color:green;"></p>
+            </div>
+             <div id="status-thankyou" class="status-card" style="display: none;">
+                <h2 id="thankyou-message">Cảm ơn bạn!</h2>
+                <i class="fa-solid fa-gift icon-large"></i>
+                <div id="points-display" style="display: none;">
+                    <p><i class="fa-solid fa-star"></i> Bạn nhận được: <span id="points-earned" class="points-value">0</span> điểm</p>
+                    <p><i class="fa-solid fa-coins"></i> Tổng điểm: <span id="total-points" class="points-value">0</span> điểm</p>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="/static/script.js"></script>
+</body>
+</html>

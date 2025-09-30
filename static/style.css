@@ -1,0 +1,209 @@
+/* static/style.css - Giao diện mới cho PaperGo */
+
+/* --- 1. BIẾN MÀU VÀ CÀI ĐẶT CHUNG --- */
+:root {
+    --green-eco: #4CAF50;
+    --green-dark: #388E3C;
+    --blue-tech: #03A9F4;
+    --blue-dark: #0288D1;
+    --yellow-accent: #FFC107;
+    --orange-accent: #FF9800;
+    --bg-light: #F5F7FA;
+    --text-dark: #333;
+    --text-light: #666;
+    --white: #FFFFFF;
+    --grey-border: #E0E0E0;
+    --shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+}
+
+body {
+    font-family: 'Poppins', sans-serif;
+    background-color: var(--bg-light);
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    color: var(--text-dark);
+}
+
+.container {
+    text-align: center;
+    background: var(--white);
+    padding: 40px;
+    border-radius: 24px;
+    box-shadow: var(--shadow);
+    width: 90%;
+    max-width: 850px;
+    box-sizing: border-box;
+}
+
+header {
+    margin-bottom: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+}
+
+.logo {
+    height: 50px;
+    width: auto;
+}
+
+header h1 {
+    color: var(--green-dark);
+    font-weight: 700;
+    font-size: 2.2em;
+    margin: 0;
+}
+
+/* --- 2. THẺ TRẠNG THÁI VÀ HIỆU ỨNG --- */
+.status-card {
+    padding: 20px;
+    /* Hiệu ứng chuyển đổi */
+    transition: opacity 0.4s ease-in-out, transform 0.4s ease-in-out;
+}
+
+/* Mặc định ẩn, khi JS thêm 'display: block' thì hiệu ứng sẽ chạy */
+.status-card[style*="display: none"] {
+    opacity: 0;
+    transform: scale(0.95);
+}
+
+h2 {
+    font-size: 1.8em;
+    font-weight: 600;
+    color: var(--blue-dark);
+    margin-top: 10px;
+    margin-bottom: 15px;
+}
+
+p {
+    color: var(--text-light);
+    font-size: 1.1em;
+    line-height: 1.6;
+}
+
+/* --- 3. CÁC THÀNH PHẦN GIAO DIỆN --- */
+#video-feed {
+    border: 5px solid var(--blue-tech);
+    border-radius: 16px;
+    margin-bottom: 15px;
+    background-color: #ecf0f1;
+}
+
+#message-area, .instruction, .time-left-text {
+    color: var(--text-light);
+    font-style: italic;
+}
+
+.buttons button {
+    font-family: 'Poppins', sans-serif;
+    font-size: 1.2em;
+    font-weight: 600;
+    padding: 15px 35px;
+    margin: 10px;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    color: var(--text-dark);
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+button i { margin-right: 10px; }
+
+#yes-button { background-color: var(--green-eco); color: var(--white); }
+#yes-button:hover { background-color: var(--green-dark); transform: translateY(-3px); box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4); }
+
+#no-button { background-color: #F44336; color: var(--white); }
+#no-button:hover { background-color: #D32F2F; transform: translateY(-3px); box-shadow: 0 6px 20px rgba(244, 67, 54, 0.4); }
+
+/* --- 4. GIAO DIỆN CÂN GIẤY --- */
+.weighing-container {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    margin: 20px 0;
+    gap: 20px;
+}
+
+.bin-display {
+    width: 45%;
+    padding: 20px;
+    border: 1px solid var(--grey-border);
+    border-radius: 16px;
+    background-color: var(--bg-light);
+}
+
+.bin-display h3 {
+    margin-top: 0;
+    color: var(--blue-dark);
+    font-weight: 600;
+}
+
+.progress-bar-container {
+    width: 100%;
+    background-color: #ecf0f1;
+    border-radius: 30px;
+    height: 30px;
+    margin: 15px 0;
+    overflow: hidden;
+}
+
+.progress-bar {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--blue-tech), var(--green-eco));
+    border-radius: 30px;
+    transition: width 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.percentage {
+    font-size: 1.8em;
+    font-weight: 700;
+    color: var(--blue-dark);
+    margin: 5px 0;
+}
+
+.weight-kg {
+    font-size: 1.2em;
+    color: var(--text-light);
+}
+
+.weighing-info {
+    font-size: 1.5em;
+    color: var(--green-dark);
+    font-weight: 600;
+    margin: 20px 0 10px;
+}
+
+/* --- 5. HIỂN THỊ ĐIỂM VÀ ICONS --- */
+.points-value {
+    font-weight: 700;
+    color: var(--yellow-accent);
+    font-size: 1.3em;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+}
+
+#points-display p {
+    margin: 8px 0;
+    font-size: 1.2em;
+}
+
+#points-display i {
+    color: var(--yellow-accent);
+    margin-right: 8px;
+}
+
+.icon-large {
+    font-size: 4em;
+    margin-bottom: 20px;
+    display: block;
+    color: var(--green-eco);
+}
+
+#status-confirmation .icon-large { color: var(--blue-tech); }
+#status-failure-learning .icon-large { color: var(--orange-accent); }
+#status-thankyou .icon-large { color: var(--yellow-accent); }
