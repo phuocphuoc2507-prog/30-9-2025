@@ -3,10 +3,10 @@ import cv2
 import faiss
 import pickle
 import numpy as np
-import pandas as pd
 from deepface import DeepFace
 import config
 import os
+from models import SessionLocal, Student # <-- THAY ĐỔI: IMPORT TỪ MODELS
 
 class FaceRecognizer:
     def __init__(self):
@@ -23,7 +23,7 @@ class FaceRecognizer:
         print("[AI] Dang tai/tai lai mo hinh AI va co so du lieu...")
         self.index = None
         self.student_ids = []
-        self.df_metadata = None
+        self.student_info_map = {} # <-- THAY ĐỔI: Dùng dictionary thay cho DataFrame
         
         try:
             face_index_path = os.path.join(config.DATABASE_PATH, "face_index.faiss")
@@ -34,14 +34,22 @@ class FaceRecognizer:
                 raise FileNotFoundError(f"Không tìm thấy file index AI: {face_index_path}")
             if not os.path.exists(student_ids_path):
                 raise FileNotFoundError(f"Không tìm thấy file student IDs: {student_ids_path}")
-            if not os.path.exists(config.METADATA_FILE):
-                raise FileNotFoundError(f"Không tìm thấy file metadata: {config.METADATA_FILE}")
                 
             self.index = faiss.read_index(face_index_path)
             with open(student_ids_path, "rb") as f:
                 self.student_ids = pickle.load(f)
-            self.df_metadata = pd.read_csv(config.METADATA_FILE)
-            self.df_metadata.set_index('student_id', inplace=True)
+
+            # --- THAY ĐỔI LỚN: ĐỌC DỮ LIỆU TỪ SQLITE THAY VÌ CSV ---
+            db = SessionLocal()
+            try:
+                all_students = db.query(Student).filter(Student.is_active == True).all()
+                self.student_info_map = {
+                    student.id: {"ho_ten": student.name, "lop": student.class_name}
+                    for student in all_students
+                }
+            finally:
+                db.close()
+            # --- KẾT THÚC THAY ĐỔI ---
             print("[AI] Tai du lieu AI thanh cong.")
         except Exception as e:
             print(f"!!! LOI: Khong the tai CSDL AI. Hay chay file build_database.py. Chi tiet: {e}")
@@ -76,13 +84,12 @@ class FaceRecognizer:
             if best_match_distance < config.RECOGNITION_THRESHOLD:
                 best_match_index = indices[0][0]
                 student_id = int(self.student_ids[best_match_index])
-                student_info = self.df_metadata.loc[student_id]
-                
-                result_package["info"] = {
-                    "student_id": student_id,
-                    "ho_ten": student_info['ho_ten'],
-                    "lop": student_info['lop']
-                }
+                # --- THAY ĐỔI: Tra cứu trong map thay vì DataFrame ---
+                student_info = self.student_info_map.get(student_id)
+                if student_info:
+                    result_package["info"] = {"student_id": student_id, **student_info}
+                else:
+                    print(f"!!! CANH BAO: Nhan dien ra student_id {student_id} nhung khong tim thay trong CSDL.")
             return result_package
         except ValueError:
             # DeepFace sẽ ném ValueError nếu không tìm thấy khuôn mặt khi enforce_detection=True

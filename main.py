@@ -13,9 +13,14 @@ import keyboard
 import queue # <-- THÊM THƯ VIỆN HÀNG ĐỢI
 import re, unicodedata
 
+# --- KÍCH HOẠT HỖ TRỢ MÃ ANSI TRÊN WINDOWS ---
+if os.name == 'nt':
+    os.system('')
+
 # --- KHỞI TẠO CÁC MODULE ---
 import config
 import hardware_handler
+from models import SessionLocal, Student # <-- IMPORT CÁC MODEL CẦN THIẾT
 import data_logger
 from face_recognizer import FaceRecognizer
 import point_handler # <-- IMPORT MODULE MỚI
@@ -58,6 +63,7 @@ learning_worker_thread = LearningWorker(learning_task_queue, recognizer)
 
 current_transaction_info = {}
 manual_trigger = False
+idle_message_printed = False # <-- BIẾN CỜ: Dùng để kiểm tra đã in thông báo IDLE chưa
 
 # --- HÀM LẮNG NGHE BÀN PHÍM ---
 def key_listener():
@@ -123,7 +129,7 @@ def handle_unknown_info_submit(data):
 
 # --- HÀM LOGIC CHÍNH ---
 def background_thread():
-    global state, cap, recognition_start_time, current_transaction_info, manual_trigger
+    global state, cap, recognition_start_time, current_transaction_info, manual_trigger, idle_message_printed
 
     print("-" * 40)
     print("He thong PaperGo Pro da khoi dong.")
@@ -132,11 +138,16 @@ def background_thread():
 
     while True:
         if state == "IDLE":
-            print(f"[{time.strftime('%H:%M:%S')}] Trang thai: CHO. Nhan phim 'h' trong CMD de bat dau.", end='\r')
+            # --- THAY ĐỔI: Chỉ in thông báo một lần duy nhất ---
+            if not idle_message_printed:
+                print(f"[{time.strftime('%H:%M:%S')}] Trang thai: CHO. Nhan phim 'h' trong CMD de bat dau.")
+                idle_message_printed = True
+            
             if manual_trigger:
                 state = "ACTIVATED"
                 manual_trigger = False
                 print(f"\n[{time.strftime('%H:%M:%S')}] >> Da kich hoat thu cong! Chuyen sang trang thai KICH HOAT.")
+                idle_message_printed = False # Reset lại để lần sau quay về IDLE sẽ in lại
             socketio.sleep(0.5)
 
         elif state == "ACTIVATED":
@@ -183,19 +194,24 @@ def background_thread():
             socketio.sleep(0.05)
 
         elif state == "AWAITING_CONFIRMATION":
-            socketio.emit('show_confirmation', {'name': current_transaction_info['ho_ten']})
-            if time.time() - recognition_start_time > config.CONFIRMATION_TIMEOUT_S:
+            # --- THAY ĐỔI: Gửi thời gian còn lại liên tục ---
+            time_left = config.CONFIRMATION_TIMEOUT_S - (time.time() - recognition_start_time)
+            socketio.emit('show_confirmation', {
+                'name': current_transaction_info['ho_ten'],
+                'time_left': int(time_left)
+            })
+            
+            if time_left <= 0:
                 state = "CLEANUP"
-            socketio.sleep(1)
+            socketio.sleep(0.5) # Giảm sleep để cập nhật mượt hơn
 
         elif state == "FAILURE_LEARNING":
             socketio.emit('update_state', {'state': 'failure_learning'})
-            # Chờ tối đa 10 giây để người dùng nhập tên/lớp (nếu có)
-            wait_time = 0
             global unknown_person_info
-            while wait_time < 10 and not (unknown_person_info.get('name') and unknown_person_info.get('class')):
+            # --- THAY ĐỔI: CHỜ KHÔNG GIỚI HẠN ---
+            while not (unknown_person_info.get('name') and unknown_person_info.get('class')):
                 socketio.sleep(0.5)
-                wait_time += 0.5
+            print("[MAIN] Da nhan thong tin tu nguoi dung. Tiep tuc xu ly...")
                 
             try:
                 if unknown_person_info.get('name') and unknown_person_info.get('class'):
@@ -287,29 +303,49 @@ def background_thread():
             
             # Lưu thông tin transaction
             if unknown_person_info.get('name') and unknown_person_info.get('class'):
-                current_transaction_info = {"student_id": "UNKNOWN", "ho_ten": unknown_person_info['name'], "lop": unknown_person_info['class'], "unidentified_folder": folder_name}
-                
-                # --- GIAO NHIỆM VỤ CHO WORKER (MỚI) ---
-                # Thay vì xử lý tại chỗ, chúng ta đưa vào hàng đợi
-                # Cần có session_id để liên kết, nên ta sẽ tạo session trước
-                session_id = data_logger.log_recycling_event(
-                    student_id="UNKNOWN",
-                    ho_ten=current_transaction_info.get("ho_ten"),
-                    lop=current_transaction_info.get("lop"),
-                    khoi_luong_kg=0, # Sẽ cập nhật sau khi cân
-                    unidentified_folder=folder_name,
-                    commit_now=True # Commit ngay để worker có thể thấy
-                )
-                current_transaction_info['session_id'] = session_id
+                # --- LOGIC MỚI: TỰ ĐỘNG TẠO HỌC SINH MỚI ---
+                db = SessionLocal()
+                try:
+                    user_name = unknown_person_info['name']
+                    user_class = unknown_person_info['class']
 
-                learning_task = {
-                    "name": unknown_person_info['name'],
-                    "class_name": unknown_person_info['class'],
-                    "unidentified_folder_path": unidentified_folder_path,
-                    "recycle_session_id": session_id
-                }
-                learning_task_queue.put(learning_task)
-                print(f"[MAIN] Da giao nhiem vu hoc cho Worker: {learning_task['name']}")
+                    # 1. Kiểm tra xem học sinh đã tồn tại chưa
+                    student = db.query(Student).filter(Student.name == user_name, Student.class_name == user_class).first()
+                    
+                    if not student:
+                        # 2. Nếu chưa, tạo mới và kích hoạt ngay. CSDL sẽ tự động gán ID mới.
+                        print(f"[MAIN] Khong tim thay hoc sinh '{user_name} - {user_class}'. Tu dong tao moi.")
+                        student = Student(
+                            name=user_name,
+                            class_name=user_class,
+                            is_active=True # Kích hoạt ngay
+                        )
+                        db.add(student)
+                        db.commit()
+                        db.refresh(student)
+                        print(f"[MAIN] Da tu dong tao hoc sinh moi: ID={student.id}, Ten={student.name}")
+
+                    # 3. Tạo session tái chế liên kết với học sinh này
+                    session_id = data_logger.log_recycling_event(
+                        student_id=student.id, ho_ten=student.name, lop=student.class_name,
+                        khoi_luong_kg=0, unidentified_folder=folder_name, commit_now=True
+                    )
+                    current_transaction_info = {"student_id": student.id, "ho_ten": student.name, "lop": student.class_name, "unidentified_folder": folder_name, "session_id": session_id}
+
+                    # 4. Giao nhiệm vụ cho worker
+                    learning_task = {
+                        "name": student.name, "class_name": student.class_name,
+                        "unidentified_folder_path": unidentified_folder_path,
+                        "recycle_session_id": session_id
+                    }
+                    learning_task_queue.put(learning_task)
+                    print(f"[MAIN] Da giao nhiem vu hoc cho Worker: {learning_task['name']}")
+                except Exception as e:
+                    print(f"!!! LOI khi tu dong tao hoc sinh: {e}")
+                    db.rollback()
+                    current_transaction_info = {"student_id": "UNKNOWN", "ho_ten": "UNKNOWN", "lop": "UNKNOWN", "unidentified_folder": folder_name}
+                finally:
+                    db.close()
             else:
                 current_transaction_info = {"student_id": "UNKNOWN", "ho_ten": "UNKNOWN", "lop": "UNKNOWN", "unidentified_folder": folder_name}
             # Reset lại biến lưu thông tin người lạ
@@ -416,7 +452,7 @@ def background_thread():
             finally:
                 state = "IDLE"
                 socketio.emit('update_state', {'state': 'idle'})
-
+                idle_message_printed = False # Reset lại để lần sau quay về IDLE sẽ in lại
 # --- KHỞI ĐỘNG HỆ THỐNG ---
 if __name__ == '__main__':
     listener_thread = threading.Thread(target=key_listener, daemon=True)

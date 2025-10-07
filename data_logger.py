@@ -16,18 +16,10 @@ def log_recycling_event(student_id, ho_ten, lop, khoi_luong_kg, points_earned=0,
     """
     db = SessionLocal()
     try:
-        # Xử lý trường hợp người lạ (chưa có trong CSDL)
-        if student_id == "UNKNOWN" and ho_ten != "UNKNOWN":
-            # Tạo một bản ghi student mới cho người lạ này để có thể tham chiếu
-            # Logic này sẽ được worker xử lý, ở đây chỉ cần tìm xem có chưa
-            existing_student = db.query(Student).filter(Student.name == ho_ten, Student.class_name == lop).first()
-            if existing_student:
-                student_id = existing_student.id
-            else:
-                student_id = None # Để là NULL trong CSDL, worker sẽ cập nhật sau
+        # Logic tìm/tạo student đã được chuyển sang main.py. Ở đây chỉ cần nhận student_id.
 
         new_session = RecycleSession(
-            student_id=int(student_id) if student_id != "UNKNOWN" else None,
+            student_id=int(student_id) if student_id and student_id != "UNKNOWN" else None,
             timestamp=datetime.utcnow(),
             weight_kg=khoi_luong_kg,
             points_awarded=points_earned,

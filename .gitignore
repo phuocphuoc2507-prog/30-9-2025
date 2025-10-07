@@ -1,41 +1,42 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-
-# C extensions
-*.so
-
-# Distribution / packaging
-.Python
-build/
-dist/
-*.egg-info/
-
-# PyInstaller
-*.spec
-
-# Installer logs
-pip-log.txt
-
-# Virtual Environments
+# --- Môi trường ảo Python ---
+# Bỏ qua các thư mục môi trường ảo phổ biến
 venv/
 env/
-.venv/
+ENV/
+*.venv
 
-# IDE / Editor specific
-.vscode/
-.idea/
+# --- File biên dịch và cache của Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-# OS-specific
-.DS_Store
-Thumbs.db
-
-# Project-specific generated files
+# --- Các file CSDL và Index ---
+# Không nên đưa CSDL và các file index được tạo tự động lên Git
 database/papergo.db
 database/face_index.faiss
 database/student_ids.pkl
+
+# --- Dữ liệu người dùng và ảnh tạm ---
+# Thư mục này chứa ảnh của người chưa xác định, sẽ rất lớn và không cần thiết trên repo
 unidentified/
 
-# Dataset folder - It's generally not a good practice to commit large datasets to Git.
+# --- Thư mục dataset ---
+# Thư mục này sẽ được cập nhật tự động bởi learning_worker.
+# Việc đưa lên Git có thể gây xung đột và làm repo rất nặng.
+# Chỉ nên backup thư mục này riêng.
 dataset/
+
+# --- Cấu hình của các IDE và Editor ---
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# --- File hệ thống của OS ---
+.DS_Store
+Thumbs.db
+
+# --- Build artifacts của PlatformIO/ESP32 ---
+PaperGo_ESP32_Firmware/.pio/
+PaperGo_ESP32_Firmware/.vscode/
