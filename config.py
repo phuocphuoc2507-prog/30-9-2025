@@ -11,6 +11,7 @@ PROXIMITY_THRESHOLD_CM = 100
 RECOGNITION_TIMEOUT_S = 15
 CONFIRMATION_TIMEOUT_S = 10
 NUM_UNKNOWN_FACES_TO_SAVE = 5
+LEARNING_INPUT_TIMEOUT_S = 120 # Thời gian (giây) chờ người dùng nhập thông tin
 WEIGHING_DURATION_S = 15 # Thời gian (giây) cho phép bỏ giấy
 
 # --- Cấu hình Thùng rác & Cân ---
@@ -22,6 +23,10 @@ BAUD_RATE = 115200
 
 # --- Cấu hình Hệ thống Điểm thưởng (MỚI) ---
 POINTS_PER_GRAM = 1 # 1 gram = 1 điểm
+
+# --- Cấu hình Logic Nghiệp vụ ---
+MIN_WEIGHT_THRESHOLD_KG = 0.01 # Ngưỡng khối lượng tối thiểu để tính điểm/ghi log
+MAX_CAMERA_INIT_ATTEMPTS = 3 # Số lần thử kết nối lại camera tối đa
 
 # --- Đường dẫn File ---
 import os

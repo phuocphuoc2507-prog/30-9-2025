@@ -81,20 +81,23 @@ def add_points_and_update_session(session_id, paper_weight_kg):
     """
     Cập nhật khối lượng cho một session đã tồn tại (dành cho người lạ)
     và cộng điểm nếu student_id đã được worker cập nhật.
+    --- REFACTOR: Bỏ logic cộng điểm trực tiếp tại đây để tránh nhân đôi.
+    --- Việc cộng điểm sẽ do LearningWorker thực hiện.
     :param session_id: ID của RecycleSession
     :param paper_weight_kg: Khối lượng giấy
     :return: (điểm nhận được, tổng điểm hiện tại)
     """
     points_to_add = round(paper_weight_kg * 1000 * config.POINTS_PER_GRAM)
     if points_to_add <= 0:
-        return 0, 0
+        return 0, 0 # Trả về 0 điểm nếu không có khối lượng
 
     db = SessionLocal()
     try:
         session = db.query(RecycleSession).filter(RecycleSession.id == session_id).first()
         if not session:
             print(f"!!! LOI: Khong tim thay session voi ID {session_id} de cap nhat.")
-            return 0, 0
+            # Vẫn trả về số điểm đã tính để hiển thị cho người dùng, nhưng không làm gì cả
+            return int(points_to_add), 0
 
         # Cập nhật khối lượng và điểm cho session
         session.weight_kg = paper_weight_kg
@@ -102,15 +105,13 @@ def add_points_and_update_session(session_id, paper_weight_kg):
 
         # Nếu worker đã cập nhật student_id cho session này, cộng điểm cho học sinh
         if session.student_id:
+            # Lấy tổng điểm hiện tại của học sinh để trả về, nhưng không cộng thêm ở đây
             student = db.query(Student).filter(Student.id == session.student_id).first()
-            if student:
-                student.total_points += points_to_add
-                db.commit()
-                db.refresh(student)
-                return int(points_to_add), int(student.total_points)
-        
+            total_points = student.total_points if student else 0
+            return int(points_to_add), int(total_points)
+
         db.commit()
-        return 0, 0 # Trả về 0 điểm nếu chưa có student_id
+        return int(points_to_add), 0 # Trả về điểm đã tính, tổng điểm là 0 vì chưa biết học sinh
     except Exception as e:
         print(f"!!! LOI khi cap nhat session va cong diem: {e}")
         db.rollback()

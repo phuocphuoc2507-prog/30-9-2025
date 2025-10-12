@@ -49,122 +49,144 @@ class LearningWorker(threading.Thread):
             "recycle_session_id": 123
         }
         """
+        # --- REFACTOR #5: Chia nhỏ giao dịch CSDL ---
+
+        # Giao dịch 1: Tìm học sinh và cập nhật session
+        student_id, points_to_add, student_name = self._find_student_and_update_session(task)
+
+        if not student_id:
+            print(f"[WORKER] Khong tim thay hoc sinh {task['name']} - {task['class_name']}. Chuyen vao muc 'unresolved'.")
+            self._move_to_unresolved(task['unidentified_folder_path'])
+            return
+
+        print(f"[WORKER] Tim thay hoc sinh: ID {student_id}")
+
+        # Giao dịch 2 (lặp): Xử lý từng ảnh, ghi audit log và chuẩn bị dữ liệu cho AI
+        image_files = [f for f in os.listdir(task['unidentified_folder_path']) if f.lower().endswith(('.jpg', '.png'))]
+        new_embeddings_to_add = []
+        new_ids_to_add = []
+
+        for image_file in image_files:
+            source_path = os.path.join(task['unidentified_folder_path'], image_file)
+            self._process_single_image(source_path, task, student_id, new_embeddings_to_add, new_ids_to_add)
+
+        # Giao dịch 3: Cộng tổng điểm cho học sinh (nếu có)
+        if points_to_add > 0:
+            self._award_points_to_student(student_id, points_to_add, student_name)
+
+        # Dọn dẹp và cập nhật AI
+        self._cleanup_and_update_ai(task['unidentified_folder_path'], new_embeddings_to_add, new_ids_to_add, student_id)
+
+    def _find_student_and_update_session(self, task):
+        """Giao dịch 1: Tìm học sinh, cập nhật RecycleSession và lấy điểm."""
         db = SessionLocal()
         try:
-            # 1. Tìm kiếm học sinh trong CSDL
             student = db.query(Student).filter(
                 Student.name == task['name'],
                 Student.class_name == task['class_name']
             ).first()
 
             if not student:
-                print(f"[WORKER] Khong tim thay hoc sinh {task['name']} - {task['class_name']}. Chuyen vao muc 'unresolved'.")
-                unresolved_path = os.path.join(config.UNIDENTIFIED_PATH, 'unresolved')
-                os.makedirs(unresolved_path, exist_ok=True)
-                
-                source_folder = task['unidentified_folder_path']
-                # Lấy tên thư mục cuối cùng (ví dụ: 'Nguyen_Van_A_10A1_20231027_103000')
-                folder_name = os.path.basename(source_folder)
-                destination_folder = os.path.join(unresolved_path, folder_name)
-                
-                # Di chuyển thư mục
-                shutil.move(source_folder, destination_folder)
-                print(f"[WORKER] Da di chuyen {source_folder} -> {destination_folder}")
-                return
+                return None, 0, None
 
-            student_id = student.id
-            print(f"[WORKER] Tim thay hoc sinh: ID {student_id}")
-
-            # --- BẮT ĐẦU LOGIC MỚI: CẬP NHẬT PHIÊN TÁI CHẾ VÀ CỘNG ĐIỂM ---
+            points_to_add = 0
             recycle_session_id = task.get('recycle_session_id')
             if recycle_session_id:
-                # 1. Truy vấn bản ghi RecycleSession tương ứng
                 session = db.query(RecycleSession).filter(RecycleSession.id == recycle_session_id).first()
                 if session:
                     print(f"[WORKER] Tim thay phien tai che ID: {recycle_session_id} de cap nhat.")
-                    # 2. Cập nhật student_id cho phiên đó
-                    session.student_id = student_id
+                    session.student_id = student.id
+                    points_to_add = session.points_awarded or 0 # Lấy điểm từ session
+                    db.commit()
+            return student.id, points_to_add, student.name
+        except Exception as e:
+            print(f"!!! LOI trong _find_student_and_update_session: {e}")
+            db.rollback()
+            return None, 0, None
+        finally:
+            db.close()
 
-                    # 3. Lấy điểm thưởng đã được tính trước đó
-                    points_to_add = session.points_awarded or 0
+    def _move_to_unresolved(self, source_folder):
+        """Di chuyển thư mục không xác định vào 'unresolved'."""
+        try:
+            unresolved_path = os.path.join(config.UNIDENTIFIED_PATH, 'unresolved')
+            os.makedirs(unresolved_path, exist_ok=True)
+            folder_name = os.path.basename(source_folder)
+            destination_folder = os.path.join(unresolved_path, folder_name)
+            shutil.move(source_folder, destination_folder)
+            print(f"[WORKER] Da di chuyen {source_folder} -> {destination_folder}")
+        except Exception as e:
+            print(f"!!! LOI khi di chuyen thu muc vao 'unresolved': {e}")
 
-                    # 4. Cộng điểm vào tổng điểm của học sinh
-                    if points_to_add > 0:
-                        student.total_points = (student.total_points or 0) + points_to_add
-                        print(f"[WORKER] Da cong {points_to_add} diem vao tong diem cua hoc sinh {student.name}.")
-            # --- KẾT THÚC LOGIC MỚI ---
+    def _process_single_image(self, source_path, task, student_id, new_embeddings_to_add, new_ids_to_add):
+        """Giao dịch 2 (lặp): Xử lý một ảnh, ghi audit log."""
+        qc_passed, status_message, face_img = self.quality_check(source_path)
 
-            # 2. Lặp qua các ảnh trong thư mục tạm và thực hiện QC
-            image_files = [f for f in os.listdir(task['unidentified_folder_path']) if f.lower().endswith(('.jpg', '.png'))]
-            
-            added_count = 0
-            new_embeddings_to_add = []
-            new_ids_to_add = []
+        db = SessionLocal()
+        try:
+            audit_log = FaceAudit(
+                recycle_session_id=task.get('recycle_session_id'),
+                assigned_student_id=student_id,
+                source_image_path=source_path,
+                qc_passed=qc_passed,
+                status_message=status_message
+            )
+            db.add(audit_log)
 
-            for image_file in image_files:
-                source_path = os.path.join(task['unidentified_folder_path'], image_file)
-                
-                # 3. Kiểm tra chất lượng (QC)
-                qc_passed, status_message, face_img = self.quality_check(source_path)
+            if qc_passed:
+                student_dataset_path = os.path.join(config.DATASET_PATH, str(student_id))
+                os.makedirs(student_dataset_path, exist_ok=True)
+                timestamp = int(time.time() * 1000)
+                new_filename = f"capture_{timestamp}.jpg"
+                destination_path = os.path.join(student_dataset_path, new_filename)
+                cv2.imwrite(destination_path, face_img)
 
-                # 4. Ghi log audit
-                audit_log = FaceAudit(
-                    recycle_session_id=task.get('recycle_session_id'),
-                    assigned_student_id=student_id,
-                    source_image_path=source_path,
-                    qc_passed=qc_passed,
-                    status_message=status_message
-                )
-                db.add(audit_log)
+                try:
+                    embedding_obj = DeepFace.represent(img_path=face_img, model_name=config.MODEL_NAME, enforce_detection=False, detector_backend='skip')
+                    new_embeddings_to_add.append(embedding_obj[0]['embedding'])
+                    new_ids_to_add.append(str(student_id))
+                except Exception as e:
+                    print(f"!!! LOI khi trích xuất embedding cho ảnh mới: {e}")
 
-                if qc_passed:
-                    # 5. Di chuyển và đổi tên file ảnh đạt chuẩn
-                    student_dataset_path = os.path.join(config.DATASET_PATH, str(student_id))
-                    os.makedirs(student_dataset_path, exist_ok=True)
-                    
-                    timestamp = int(time.time() * 1000)
-                    new_filename = f"capture_{timestamp}.jpg"
-                    destination_path = os.path.join(student_dataset_path, new_filename)
-                    
-                    # Lưu ảnh khuôn mặt đã được cắt và căn chỉnh
-                    cv2.imwrite(destination_path, face_img)
-
-                    # Trích xuất embedding từ ảnh đã QC và lưu lại để thêm vào CSDL AI sau
-                    try:
-                        embedding_obj = DeepFace.represent(img_path=face_img, model_name=config.MODEL_NAME, enforce_detection=False, detector_backend='skip')
-                        new_embeddings_to_add.append(embedding_obj[0]['embedding'])
-                        new_ids_to_add.append(str(student_id))
-                    except Exception as e:
-                        print(f"!!! LOI khi trích xuất embedding cho ảnh mới: {e}")
-
-                    audit_log.destination_image_path = destination_path
-                    print(f"[WORKER] QC PASSED: Da luu anh moi tai {destination_path}")
-                    added_count += 1
-                else:
-                    print(f"[WORKER] QC FAILED: {source_path} - Ly do: {status_message}")
+                audit_log.destination_image_path = destination_path
+                print(f"[WORKER] QC PASSED: Da luu anh moi tai {destination_path}")
+            else:
+                print(f"[WORKER] QC FAILED: {source_path} - Ly do: {status_message}")
 
             db.commit()
-
-            # 6. Dọn dẹp thư mục tạm
-            try:
-                shutil.rmtree(task['unidentified_folder_path'])
-                print(f"[WORKER] Da xoa thu muc tam: {task['unidentified_folder_path']}")
-            except Exception as e:
-                print(f"!!! LOI khi xoa thu muc tam: {e}")
-
-            # 7. Cập nhật lại index AI nếu có ảnh mới
-            if new_embeddings_to_add:
-                print(f"[WORKER] Co {added_count} anh moi. Yeu cau xay dung lai CSDL AI...")
-                # Gọi hàm thêm vào index thay vì build lại từ đầu
-                add_to_index(new_embeddings_to_add, new_ids_to_add)
-                # Yêu cầu FaceRecognizer tải lại dữ liệu
-                self.face_recognizer.reload_data()
-
         except Exception as e:
-            print(f"!!! LOI nghiem trong khi xu ly task: {e}")
+            print(f"!!! LOI trong _process_single_image: {e}")
             db.rollback()
         finally:
             db.close()
+
+    def _award_points_to_student(self, student_id, points_to_add, student_name):
+        """Giao dịch 3: Cộng điểm vào tài khoản của học sinh."""
+        db = SessionLocal()
+        try:
+            student = db.query(Student).filter(Student.id == student_id).first()
+            if student:
+                student.total_points = (student.total_points or 0) + points_to_add
+                db.commit()
+                print(f"[WORKER] Da cong {points_to_add} diem vao tong diem cua hoc sinh {student_name}.")
+        except Exception as e:
+            print(f"!!! LOI trong _award_points_to_student: {e}")
+            db.rollback()
+        finally:
+            db.close()
+
+    def _cleanup_and_update_ai(self, folder_path, embeddings, ids, student_id):
+        """Dọn dẹp thư mục tạm và cập nhật CSDL AI."""
+        try:
+            shutil.rmtree(folder_path)
+            print(f"[WORKER] Da xoa thu muc tam: {folder_path}")
+        except Exception as e:
+            print(f"!!! LOI khi xoa thu muc tam: {e}")
+
+        if embeddings:
+            print(f"[WORKER] Co {len(embeddings)} anh moi. Yeu cau xay dung lai CSDL AI...")
+            add_to_index(embeddings, ids)
+            self.face_recognizer.reload_data()
 
     def quality_check(self, image_path):
         """

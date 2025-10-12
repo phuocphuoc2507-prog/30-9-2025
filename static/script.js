@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const pointsDisplay = document.getElementById('points-display');
     const pointsEarnedSpan = document.getElementById('points-earned');
     const totalPointsSpan = document.getElementById('total-points');
+    const learningTimeLeftSpan = document.getElementById('learning-time-left'); // THÊM MỚI
 
 
     // --- THAY ĐỔI: Lấy các phần tử cho cả 2 cân ---
@@ -120,6 +121,13 @@ document.addEventListener('DOMContentLoaded', () => {
             pointsDisplay.style.display = 'block'; // Hiện vùng hiển thị điểm
         } else {
             pointsDisplay.style.display = 'none'; // Ẩn đi nếu không nhận được điểm
+        }
+    });
+
+    // THÊM MỚI: Lắng nghe sự kiện cập nhật đồng hồ đếm ngược khi học người mới
+    socket.on('update_learning_timer', function(data) {
+        if (learningTimeLeftSpan) {
+            learningTimeLeftSpan.textContent = data.time_left;
         }
     });
 
